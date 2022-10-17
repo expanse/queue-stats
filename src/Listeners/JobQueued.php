@@ -2,7 +2,7 @@
 
 namespace Expanse\QueueStats\Listeners;
 
-use Expanse\QueueStats\Models\QueueStats;
+use Expanse\QueueStats\Models\QueueLog;
 
 class JobQueued
 {
@@ -22,12 +22,15 @@ class JobQueued
      */
     public function handle($event)
     {
-        QueueStats::create([
+        QueueLog::create([
             'task' => get_class($event),
             'connection' => $event->connectionName,
+            // @TODO Laravel doesn't actually provide this information
+            // in the same way to JobQueued that it does to JobProcessing
+            // or JobProcessed or JobFailed
+            'queue' => $event->job->queue ?? '',
             'class' => $event->job->class,
+            'job_id' => $event->id,
         ]);
-
-        \Log::debug(json_encode($event));
     }
 }

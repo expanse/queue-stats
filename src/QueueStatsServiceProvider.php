@@ -27,6 +27,10 @@ class QueueStatsServiceProvider extends ServiceProvider
             __DIR__ . '/../database/migrations/' => base_path('/database/migrations'),
         ], 'migrations');
 
+        $this->commands([
+            Commands\QueueStatsCommand::class
+        ]);
+
         $this->app->register(QueueStatsEventProvider::class);
     }
 }

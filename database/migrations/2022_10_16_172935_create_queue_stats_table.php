@@ -10,10 +10,12 @@ class CreateQueueStatsTable extends Migration
     {
         Schema::create('queue_stats', function (Blueprint $table) {
             $table->id();
-            $table->string('task');
-            $table->string('connection');
             $table->string('class');
-            $table->timestamp('created_at', 5)->nullable();
+            $table->integer('queue_count');
+            $table->integer('fail_count');
+            $table->float('processing_wait');
+            $table->float('processing_time');
+            $table->date('report_date');
         });
     }
 

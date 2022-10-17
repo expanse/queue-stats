@@ -2,7 +2,7 @@
 
 namespace Expanse\QueueStats\Listeners;
 
-use Expanse\QueueStats\Models\QueueStats;
+use Expanse\QueueStats\Models\QueueLog;
 
 class JobFailed
 {
@@ -22,10 +22,12 @@ class JobFailed
      */
     public function handle($event)
     {
-        QueueStats::create([
+        QueueLog::create([
             'task' => get_class($event),
             'connection' => $event->connectionName,
+            'queue' => $event->job->getQueue(),
             'class' => $event->job->resolveName(),
+            'job_id' => $event->job->getJobId(),
         ]);
     }
 }
