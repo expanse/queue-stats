@@ -3,6 +3,7 @@
 namespace Expanse\QueueStats;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Console\Scheduling\Schedule;
 
 class QueueStatsServiceProvider extends ServiceProvider
 {
@@ -30,6 +31,10 @@ class QueueStatsServiceProvider extends ServiceProvider
         $this->commands([
             Commands\QueueStatsCommand::class
         ]);
+
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
+            $schedule->command(Commands\QueueStats::class)->dailyAt('00:07');
+        });
 
         $this->app->register(QueueStatsEventProvider::class);
     }
