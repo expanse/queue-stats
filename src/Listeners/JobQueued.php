@@ -29,7 +29,7 @@ class JobQueued
             // in the same way to JobQueued that it does to JobProcessing
             // or JobProcessed or JobFailed
             'queue' => $event->job->queue ?? '',
-            'class' => $event->job->class,
+            'class' => $event->job->class ?? get_class($event->job),
             'job_id' => $event->id,
         ]);
     }
