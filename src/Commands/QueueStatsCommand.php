@@ -2,15 +2,15 @@
 
 namespace Expanse\QueueStats\Commands;
 
-use Carbon\Carbon;
-use Illuminate\Console\Command;
+use Carbon\CarbonImmutable;
 use Expanse\QueueStats\Models\QueueLog;
 use Expanse\QueueStats\Models\QueueStats;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Queue\Events\JobQueued;
+use Illuminate\Console\Command;
 use Illuminate\Queue\Events\JobFailed;
-use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobQueued;
+use Illuminate\Support\Facades\DB;
 
 class QueueStatsCommand extends Command
 {
@@ -20,12 +20,12 @@ class QueueStatsCommand extends Command
 
     public $description = 'Generate queue stats from the queue log';
 
-    protected Carbon $date;
+    protected CarbonImmutable $date;
 
-    public function handle(): int
+    public function handle() : int
     {
-        $this->date = Carbon::now();
-        $followups = collect();
+        $this->date = $this->option('date') ? CarbonImmutable::parse($this->option('date')) : CarbonImmutable::now()->subDay();
+        $followups  = collect();
 
         DB::transaction(function () use ($followups) {
             // Load up anything that's already been saved
@@ -45,14 +45,14 @@ class QueueStatsCommand extends Command
                             || $job_group->contains('task', JobProcessed::class)
                         )
                     )) {
-                        $follups->push($job_group->first()->job_id);
+                        $followups->push($job_group->first()->job_id);
 
                         return;
                     }
 
                     $queueStat = $stats->get($job_group->first()->class, new QueueStats());
 
-                    $queueStat->class = $job_group->first()->class;
+                    $queueStat->class       = $job_group->first()->class;
                     $queueStat->report_date = $job_group->first()->created_at->toDateString();
                     $queueStat->queue_count = $queueStat->queue_count + 1;
 
@@ -62,27 +62,27 @@ class QueueStatsCommand extends Command
 
                     // At this point, we know that it was queued and started processing, so we
                     // can determine the wait time for this task
-                    $queueStat->processing_wait =
-                        $queueStat->processing_wait +
+                    $queueStat->processing_wait = $queueStat->processing_wait +
                         ($job_group->firstWhere('task', JobProcessing::class)->created_at->diffInRealMilliseconds($job_group->firstWhere('task', JobQueued::class)->created_at));
 
                     // Now we determine how long the job took to execute, either through completion
                     // or through failure
-                    $queueStat->processing_time =
-                        $queueStat->processing_time +
+                    $queueStat->processing_time = $queueStat->processing_time +
                         ($job_group->firstWhere('task', JobProcessed::class) ?? $job_group->firstWhere('task', JobFailed::class))->created_at->diffInRealMilliseconds($job_group->firstWhere('task', JobProcessing::class)->created_at);
 
                     $stats->put($job_group->first()->class, $queueStat);
                 });
 
-            $stats->each(function (QueueStats $queueStat) {
+            $stats->each(function (QueueStats $queueStat) use ($followups) {
                 QueueLog::whereBetween('created_at', [ $this->date->startOfDay(), $this->date->endOfDay() ])
-                    ->where('created_at', '<=', Carbon::now()->toDateTimeString())
+                    ->where('created_at', '<=', CarbonImmutable::now()->toDateTimeString())
                     ->where('class', $queueStat->class)
                     ->whereNotIn('job_id', $followups->all())
                     ->delete();
 
-
+                if ($queueStat->fail_count === null) {
+                    $queueStat->fail_count = 0;
+                }
                 $queueStat->save();
             });
         });

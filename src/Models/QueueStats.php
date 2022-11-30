@@ -9,6 +9,8 @@ class QueueStats extends Model
 {
     use HasFactory;
 
+    public $timestamps = false;
+
     public $fillable = [
         'class',
         'queue_count',
