@@ -35,7 +35,7 @@ class QueueStatsCommand extends Command
             QueueLog::whereBetween('created_at', [ $this->date->startOfDay(), $this->date->endOfDay() ])
                 ->get()
                 ->groupBy('job_id')
-                ->each(function ($job_group) use ($stats, $followups) {
+                ->each(function ($job_group) use (&$stats, $followups) {
                     // If the job_group doesn't have (JobQueued *and* one of JobFailed, JobProcessed)
                     // then we add it to the followups collection to query manually
                     if (! (
@@ -45,33 +45,23 @@ class QueueStatsCommand extends Command
                             || $job_group->contains('task', JobProcessed::class)
                         )
                     )) {
-                        $followups->push($job_group->first()->job_id);
+	                    $this->info("Following up on {$job_group->first()->job_id}");
+	                    $followups->push($job_group->first()->job_id);
 
                         return;
                     }
 
-                    $queueStat = $stats->get($job_group->first()->class, new QueueStats());
-
-                    $queueStat->class       = $job_group->first()->class;
-                    $queueStat->report_date = $job_group->first()->created_at->toDateString();
-                    $queueStat->queue_count = $queueStat->queue_count + 1;
-
-                    if ($job_group->contains('task', JobFailed::class)) {
-                        $queueStat->fail_count = $queueStat->fail_count + 1;
-                    }
-
-                    // At this point, we know that it was queued and started processing, so we
-                    // can determine the wait time for this task
-                    $queueStat->processing_wait = $queueStat->processing_wait +
-                        ($job_group->firstWhere('task', JobProcessing::class)->created_at->diffInRealMilliseconds($job_group->firstWhere('task', JobQueued::class)->created_at));
-
-                    // Now we determine how long the job took to execute, either through completion
-                    // or through failure
-                    $queueStat->processing_time = $queueStat->processing_time +
-                        ($job_group->firstWhere('task', JobProcessed::class) ?? $job_group->firstWhere('task', JobFailed::class))->created_at->diffInRealMilliseconds($job_group->firstWhere('task', JobProcessing::class)->created_at);
-
-                    $stats->put($job_group->first()->class, $queueStat);
+                    $stats = $this->populateStatsForJob($job_group, $stats);
                 });
+
+            $followups->each(function ($jobId) use (&$stats) {
+	            QueueLog::where('job_id', $jobId)
+	                ->get()
+					->groupBy('job_id')
+					->each(function ($logGroup) use (&$stats) {
+						$stats = $this->populateStatsForJob($logGroup, $stats);
+					});
+            });
 
             $stats->each(function (QueueStats $queueStat) use ($followups) {
                 QueueLog::whereBetween('created_at', [ $this->date->startOfDay(), $this->date->endOfDay() ])
@@ -85,8 +75,48 @@ class QueueStatsCommand extends Command
                 }
                 $queueStat->save();
             });
+
         });
 
         return self::SUCCESS;
+    }
+
+    /**
+     *
+     * @param Collection<QueueLog> $job_group
+     */
+    private function populateStatsForJob($job_group, $stats)
+    {
+	    $queueStat = $stats->get($job_group->first()->class, new QueueStats());
+
+	    $queueStat->class       = $job_group->first()->class;
+	    $queueStat->report_date = $job_group->first()->created_at->toDateString();
+	    $queueStat->queue_count = $queueStat->queue_count + 1;
+
+		$jobQueued = $job_group->firstWhere('task', JobQueued::class);
+		$jobProcessing = $job_group->firstWhere('task', JobProcessing::class);
+		$jobProcessed = $job_group->firstWhere('task', JobProcessed::class);
+		$jobFailed = $job_group->firstWhere('task', JobFailed::class);
+
+	    if ($jobFailed !== null) {
+	        $queueStat->fail_count = $queueStat->fail_count + 1;
+	    }
+
+	    // At this point, we know that it was queued and started processing, so we
+	    // can determine the wait time for this task
+	    $queueStat->processing_wait = $queueStat->processing_wait +
+	        (
+				$jobQueued->created_at
+						->diffInRealMilliseconds($jobProcessing->created_at)
+			);
+
+	    // Now we determine how long the job took to execute, either through completion
+	    // or through failure
+	    $queueStat->processing_time = $queueStat->processing_time +
+	        $jobProcessing->created_at->diffInRealMilliseconds(($jobProcessed ?? $jobFailed)->created_at);
+
+	    $stats->put($job_group->first()->class, $queueStat);
+
+		return $stats;
     }
 }
