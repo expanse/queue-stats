@@ -33,7 +33,7 @@ class QueueStatsServiceProvider extends ServiceProvider
         ]);
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
-            $schedule->command(Commands\QueueStats::class)->dailyAt('00:07');
+            $schedule->command(Commands\QueueStatsCommand::class)->dailyAt('00:07');
         });
 
         $this->app->register(QueueStatsEventProvider::class);
