@@ -1,0 +1,18 @@
+---
+output: false
+pre-commit:
+  piped: true
+  jobs:
+    - name: php lint
+      run: php -l {staged_files} > /dev/null
+      glob: "*.php"
+    - name: php-cs-fixer cleanup
+      run: vendor/bin/php-cs-fixer fix --config .php-cs-fixer.php --diff {staged_files} 2> /dev/null
+      glob: "*.php"
+      stage_fixed: true
+    - name: phpstan
+      run: vendor/bin/phpstan analyze {staged_files} 2> /dev/null
+      glob: "*.php"
+    - name: phpunit
+      run: vendor/bin/phpunit 2> /dev/null
+      glob: "*.php"
